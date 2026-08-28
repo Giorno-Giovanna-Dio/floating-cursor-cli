@@ -1,0 +1,5 @@
+/floating-cursor
+/floating-cursor.exe
+/dist/
+.DS_Store
+.nvimlog
