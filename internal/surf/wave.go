@@ -6,14 +6,23 @@ const (
 	defaultAmplitude = 4.0
 	defaultFrequency = 0.22
 	cellsPerSecond   = 12.0
+	harmonicMix      = 0.55
+	harmonicFreq     = 2.15
+	harmonicPhase    = 1.37
 )
 
 // WaveY returns the vertical offset of the swell at column x.
+// Positive values sit lower on the terminal. A second harmonic
+// makes neighboring peaks different heights so the set has crests
+// and troughs, not a single bump.
 func WaveY(x int, phase, amplitude float64) float64 {
 	if amplitude <= 0 {
 		amplitude = defaultAmplitude
 	}
-	return math.Sin(float64(x)*defaultFrequency+phase) * amplitude
+	xf := float64(x)
+	primary := math.Sin(xf*defaultFrequency + phase)
+	harmonic := math.Sin(xf*defaultFrequency*harmonicFreq + phase*harmonicPhase)
+	return (primary + harmonicMix*harmonic) * amplitude
 }
 
 // WaterRow maps a wave offset onto a terminal row, keeping the swell

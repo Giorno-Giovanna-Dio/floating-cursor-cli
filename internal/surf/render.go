@@ -10,6 +10,7 @@ const (
 	ansiDim    = "\x1b[2m"
 	ansiCyan   = "\x1b[36m"
 	ansiBright = "\x1b[96m"
+	ansiBlue   = "\x1b[34m"
 	ansiYellow = "\x1b[93m"
 )
 
@@ -42,6 +43,8 @@ func SpriteWidth(ascii, emoji bool) int {
 }
 
 // Render draws one complete frame, including a status row.
+// Water is filled from each column's surface down to the bottom
+// so crests stand high and troughs sit low.
 func Render(cfg Config, elapsed float64) string {
 	w, h := cfg.Width, cfg.Height
 	if w < 8 {
@@ -70,10 +73,9 @@ func Render(cfg Config, elapsed float64) string {
 	writeString(rows[0], 0, statusLine(w, cfg.ASCII))
 
 	for x := 0; x < w; x++ {
-		row := WaterRow(h, WaveY(x, phase, amp))
-		rows[row][x] = waveGlyph(x, row, cfg.ASCII)
-		if row+1 < h && x%3 != 1 {
-			rows[row+1][x] = foamGlyph(cfg.ASCII)
+		surface := WaterRow(h, WaveY(x, phase, amp))
+		for y := surface; y < h; y++ {
+			rows[y][x] = waterGlyph(y-surface, cfg.ASCII, x, y)
 		}
 	}
 
@@ -98,6 +100,10 @@ func Render(cfg Config, elapsed float64) string {
 			b.WriteString(ansiReset)
 		case strings.Contains(line, sprite):
 			b.WriteString(colorizeRow(line, sprite, cfg.ASCII))
+		case y > h*2/3:
+			b.WriteString(ansiBlue)
+			b.WriteString(line)
+			b.WriteString(ansiReset)
 		default:
 			b.WriteString(ansiCyan)
 			b.WriteString(line)
@@ -111,14 +117,11 @@ func Render(cfg Config, elapsed float64) string {
 }
 
 func amplitudeFor(height int) float64 {
-	amp := float64(height) / 5
-	if amp < 2 {
+	band := float64(height-3) / 2
+	if band < 2 {
 		return 2
 	}
-	if amp > 8 {
-		return 8
-	}
-	return amp
+	return band * 0.92
 }
 
 func statusLine(width int, ascii bool) string {
@@ -137,28 +140,37 @@ func statusLine(width int, ascii bool) string {
 	return text
 }
 
-func waveGlyph(x, row int, ascii bool) rune {
+func waterGlyph(depth int, ascii bool, x, row int) rune {
 	if ascii {
-		if (x+row)%4 == 0 {
-			return '-'
+		switch {
+		case depth == 0:
+			if (x+row)%4 == 0 {
+				return '-'
+			}
+			return '~'
+		case depth == 1:
+			return '.'
+		default:
+			return ':'
 		}
-		return '~'
 	}
-	switch (x + row) % 5 {
-	case 0:
-		return '≈'
-	case 2:
-		return '∽'
+	switch {
+	case depth == 0:
+		switch (x + row) % 5 {
+		case 0:
+			return '≈'
+		case 2:
+			return '∽'
+		default:
+			return '~'
+		}
+	case depth == 1:
+		return '░'
+	case depth < 4:
+		return '▒'
 	default:
-		return '~'
+		return '▓'
 	}
-}
-
-func foamGlyph(ascii bool) rune {
-	if ascii {
-		return '.'
-	}
-	return '·'
 }
 
 func encodeRow(row []rune, isSurferRow bool, skip int) string {

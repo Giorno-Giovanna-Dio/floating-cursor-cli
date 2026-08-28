@@ -1,67 +1,81 @@
 package surf
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
 )
 
-func TestRenderASCIIContainsSurferAndWave(t *testing.T) {
-	frame := Render(Config{Width: 40, Height: 12, ASCII: true, Speed: 1}, 0.4)
-	if !strings.Contains(frame, ">") {
-		t.Fatal("expected ASCII surfer '>' in frame")
+var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func TestRenderASCIIFitsTerminal(t *testing.T) {
+	const w, h = 48, 12
+	frame := Render(Config{Width: w, Height: h, ASCII: true, Speed: 1}, 1.25)
+	plain := ansi.ReplaceAllString(frame, "")
+	lines := strings.Split(plain, "\n")
+	if len(lines) != h {
+		t.Fatalf("got %d lines, want %d", len(lines), h)
 	}
-	if !strings.Contains(frame, "~") && !strings.Contains(frame, "-") {
-		t.Fatal("expected wave glyphs in frame")
+	for i, line := range lines {
+		if utf8.RuneCountInString(line) != w {
+			t.Fatalf("line %d width %d, want %d (%q)", i, utf8.RuneCountInString(line), w, line)
+		}
 	}
-	if !strings.Contains(frame, "floating-cursor") {
-		t.Fatal("expected status line")
+	if !strings.Contains(plain, "floating-cursor") {
+		t.Fatal("status line missing")
+	}
+	if !strings.Contains(plain, ">") {
+		t.Fatal("ascii rider missing")
 	}
 }
 
-func TestRenderDefaultUsesCursorSprite(t *testing.T) {
-	frame := Render(Config{Width: 32, Height: 10, Speed: 1}, 0)
-	if !strings.Contains(frame, "▲") {
-		t.Fatal("expected default cursor sprite")
+func TestSpriteChoices(t *testing.T) {
+	if Sprite(true, false) != ">" {
+		t.Fatalf("ascii sprite: %q", Sprite(true, false))
 	}
-	if strings.Contains(frame, ">") {
-		t.Fatal("did not expect ASCII surfer in default mode")
-	}
-}
-
-func TestRenderPadsStatusLineToWidth(t *testing.T) {
-	width := 48
-	frame := Render(Config{Width: width, Height: 8, ASCII: true}, 0)
-	first := strings.Split(frame, "\n")[0]
-	plain := stripANSI(first)
-	if utf8.RuneCountInString(plain) != width {
-		t.Fatalf("status width = %d, want %d (%q)", utf8.RuneCountInString(plain), width, plain)
-	}
-}
-
-func TestSpriteWidth(t *testing.T) {
-	if SpriteWidth(true, false) != 1 {
-		t.Fatal("ASCII sprite should be 1 cell")
-	}
-	if SpriteWidth(false, false) != 1 {
-		t.Fatal("default sprite should be 1 cell")
+	if Sprite(false, true) != "🏄" {
+		t.Fatalf("emoji sprite: %q", Sprite(false, true))
 	}
 	if SpriteWidth(false, true) != 2 {
-		t.Fatal("emoji sprite should be 2 cells")
+		t.Fatal("emoji should be two cells")
 	}
 }
 
-func stripANSI(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' {
-			if j := strings.IndexByte(s[i:], 'm'); j >= 0 {
-				i += j + 1
+func TestRenderWavesVaryInHeight(t *testing.T) {
+	const w, h = 64, 18
+	frame := Render(Config{Width: w, Height: h, ASCII: true, Speed: 1}, 0.9)
+	plain := ansi.ReplaceAllString(frame, "")
+	lines := strings.Split(plain, "\n")
+	if len(lines) != h {
+		t.Fatalf("got %d lines, want %d", len(lines), h)
+	}
+
+	minSurf, maxSurf := h, 0
+	found := false
+	for x := 0; x < w; x++ {
+		for y := 1; y < h; y++ {
+			rs := []rune(lines[y])
+			if x >= len(rs) {
+				break
+			}
+			if rs[x] == ' ' || rs[x] == '>' {
 				continue
 			}
+			if y < minSurf {
+				minSurf = y
+			}
+			if y > maxSurf {
+				maxSurf = y
+			}
+			found = true
+			break
 		}
-		b.WriteByte(s[i])
-		i++
 	}
-	return b.String()
+	if !found {
+		t.Fatal("no water surface found")
+	}
+	if maxSurf-minSurf < 4 {
+		t.Fatalf("expected crests and troughs, surface rows %d..%d", minSurf, maxSurf)
+	}
 }

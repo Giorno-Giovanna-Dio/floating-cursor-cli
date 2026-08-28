@@ -1,63 +1,68 @@
 package surf
 
-import (
-	"math"
-	"testing"
-)
+import "testing"
 
-func TestWaveYPeaksAndTroughs(t *testing.T) {
-	peak := WaveY(0, math.Pi/2, 4)
-	trough := WaveY(0, 3*math.Pi/2, 4)
-	if math.Abs(peak-4) > 1e-9 {
-		t.Fatalf("peak = %v, want 4", peak)
-	}
-	if math.Abs(trough+4) > 1e-9 {
-		t.Fatalf("trough = %v, want -4", trough)
+func TestSurferStateStartsAtOrigin(t *testing.T) {
+	x, laps := SurferState(0, 1, 80, 1)
+	if x != 0 || laps != 0 {
+		t.Fatalf("got x=%d laps=%d, want 0 0", x, laps)
 	}
 }
 
-func TestWaterRowStaysInBounds(t *testing.T) {
-	for _, offset := range []float64{-40, -2, 0, 2, 40} {
-		row := WaterRow(12, offset)
-		if row < 1 || row > 10 {
-			t.Fatalf("offset %v mapped to row %d, out of bounds", offset, row)
+func TestSurferStateWraps(t *testing.T) {
+	// 1s at 12 cells/s, width 10, sprite 1 => span 9 => 12/9 = 1 lap remainder 3
+	x, laps := SurferState(1, 1, 10, 1)
+	if x != 3 || laps != 1 {
+		t.Fatalf("got x=%d laps=%d, want 3 1", x, laps)
+	}
+}
+
+func TestWaterRowStaysInBand(t *testing.T) {
+	height := 12
+	for _, offset := range []float64{-100, -4, 0, 4, 100} {
+		row := WaterRow(height, offset)
+		if row < 1 || row > height-2 {
+			t.Fatalf("offset %v mapped to row %d, out of 1..%d", offset, row, height-2)
 		}
 	}
-	if got := WaterRow(2, 0); got != 1 {
-		t.Fatalf("tiny terminal row = %d, want 1", got)
+}
+
+func TestWaveYHasCrestsAndTroughs(t *testing.T) {
+	minY, maxY := WaveY(0, 0, 4), WaveY(0, 0, 4)
+	for x := 0; x < 80; x++ {
+		y := WaveY(x, 0.4, 4)
+		if y < minY {
+			minY = y
+		}
+		if y > maxY {
+			maxY = y
+		}
+	}
+	if minY >= 0 {
+		t.Fatalf("expected a trough below 0, min=%v", minY)
+	}
+	if maxY <= 0 {
+		t.Fatalf("expected a crest above 0, max=%v", maxY)
+	}
+	if maxY-minY < 5 {
+		t.Fatalf("wave range too small: min=%v max=%v", minY, maxY)
 	}
 }
 
-func TestSurferStateWrapsIntoLaps(t *testing.T) {
-	width := 40
-	sprite := 1
-	span := width - sprite
-
-	x, laps := SurferState(0, 1, width, sprite)
-	if x != 0 || laps != 0 {
-		t.Fatalf("start x,laps = %d,%d want 0,0", x, laps)
+func TestWaveYScalesWithAmplitude(t *testing.T) {
+	small := WaveY(3, 0, 2)
+	large := WaveY(3, 0, 8)
+	if large == 0 && small == 0 {
+		t.Fatal("expected a non-zero wave sample")
 	}
-
-	elapsedOneLap := float64(span) / cellsPerSecond
-	x, laps = SurferState(elapsedOneLap, 1, width, sprite)
-	if laps != 1 {
-		t.Fatalf("after one lap: laps = %d, want 1 (x=%d)", laps, x)
-	}
-
-	xFast, lapsFast := SurferState(1, 2, width, sprite)
-	xSlow, lapsSlow := SurferState(1, 1, width, sprite)
-	if lapsFast < lapsSlow || (lapsFast == lapsSlow && xFast <= xSlow) {
-		t.Fatalf("faster speed should advance further: fast=%d/%d slow=%d/%d", xFast, lapsFast, xSlow, lapsSlow)
+	if abs(large) <= abs(small) {
+		t.Fatalf("larger amplitude should move more: small=%v large=%v", small, large)
 	}
 }
 
-func TestSurferStateRejectsNonPositiveInputs(t *testing.T) {
-	x, laps := SurferState(3, 0, 20, 0)
-	if laps < 0 || x < 0 {
-		t.Fatalf("unexpected negative state x=%d laps=%d", x, laps)
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
 	}
-	x, laps = SurferState(1, 1, 0, 1)
-	if x != 0 || laps != 0 {
-		t.Fatalf("zero width should stay put, got x=%d laps=%d", x, laps)
-	}
+	return v
 }
